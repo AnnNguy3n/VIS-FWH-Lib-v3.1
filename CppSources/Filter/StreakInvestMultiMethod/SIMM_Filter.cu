@@ -73,10 +73,6 @@ bool Multi_investMethod::compute_result(bool force_save) {
     int blocks_invest = (total_threads + threads.x - 1) / threads.x;
     // Tính dung lượng shared memory
     int shared_mem_bytes = threads.x * (NUM_SYMBOL_UNIQUE + 12*NUM_STRATEGY);
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cudaEventRecord(start);
     M_investMethod<<<blocks_invest, threads, shared_mem_bytes>>>(
         temp_weight_storage,
         d_threshold,
@@ -85,14 +81,7 @@ bool Multi_investMethod::compute_result(bool force_save) {
         BOOL_ARG,
         d_result,
         num_array
-    );
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
-    float milliseconds = 0;
-    cudaEventElapsedTime(&milliseconds, start, stop);
-    printf("[INFO] M_investMethod executed in %.3f ms\n", milliseconds);
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+    );cudaDeviceSynchronize();
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
         fprintf(stderr, "[ERROR] Kernel launch failed: %s\n", cudaGetErrorString(err)); raise_error("", "");
