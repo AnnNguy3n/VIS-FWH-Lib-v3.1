@@ -8,6 +8,8 @@ import multiprocessing
 from PySources import suppFunc
 import datetime
 import sys
+from PySources.editConstants import edit_constants
+from PySources.base import Base
 
 
 def run_worker(lib_abs_path, generate_method, filter_name, worker_type, config_path, wait_before_run, timeout):
@@ -17,8 +19,8 @@ def run_worker(lib_abs_path, generate_method, filter_name, worker_type, config_p
     time.sleep(wait_before_run)
 
     command = f"{lib_abs_path}ExeFile/"
-    command += suppFunc.generate_method[generate_method]["command"]
-    command += suppFunc.filter_fields[filter_name]["command"]
+    filename = suppFunc.generate_method[generate_method]["command"] + suppFunc.filter_fields[filter_name]["command"]
+    command += filename
 
     if worker_type == "CPU":
         command += "CPU.exe"
@@ -37,6 +39,8 @@ def run_worker(lib_abs_path, generate_method, filter_name, worker_type, config_p
     print(f"Time start: {now.hour}-{now.minute}-{now.second}")
     estimated_end = now + datetime.timedelta(minutes=timeout)
     print(f"Estimated time end: {estimated_end.hour}-{estimated_end.minute}-{estimated_end.second}")
+
+    os.system(f"start /wait cmd /c nvcc {lib_abs_path}SIMM.cu -o {lib_abs_path}ExeFile/{filename}CUDA.exe")
     os.system(f"start /wait cmd /c {command}")
 
 
@@ -140,6 +144,10 @@ def generate_task_config(config_item, warehouse_path, folder_formula, lib_abs_pa
 
     print("\n".join(task_lines))
     print()
+
+    vis = Base(pd.read_excel(data_path), config_item["interest"], config_item["valuearg_threshold"])
+    edit_constants(vis, {"num_cycle_result": config_item["num_cycle"],
+                         "num_strategy": config_item["num_strategy"]})
 
     return config_path, config_item['generate_method'], config_item['filter']
 
