@@ -111,8 +111,8 @@ def generate_task_config(config_item, warehouse_path, folder_formula, lib_abs_pa
     filter_fields = []
     for i in range(1, num_strategy + 1):
         filter_fields.extend([
-            f"ValGeo{i}",
-            f"GeoNgn{i}",
+            # f"ValGeo{i}",
+            # f"GeoNgn{i}",
             f"ValHar{i}",
             f"HarNgn{i}"
         ])
