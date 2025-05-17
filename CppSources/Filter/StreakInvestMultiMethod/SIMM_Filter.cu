@@ -66,7 +66,7 @@ bool Multi_investMethod::compute_result(bool force_save) {
     fill_thresholds<<<blocks_fill, threads, THRESHOLDS_PER_CYCLE * 4 * threads.x>>>(
         temp_weight_storage, d_threshold,
         num_array
-    );
+    );cudaDeviceSynchronize();
 
     // 2. Chạy kernel đầu tư song song trên (array × threshold)
     int total_threads = num_array * THRESHOLDS_PER_ARRAY;
@@ -81,7 +81,7 @@ bool Multi_investMethod::compute_result(bool force_save) {
         BOOL_ARG,
         d_result,
         num_array
-    );
+    );cudaDeviceSynchronize();
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
         fprintf(stderr, "[ERROR] Kernel launch failed: %s\n", cudaGetErrorString(err)); raise_error("", "");
@@ -96,7 +96,7 @@ bool Multi_investMethod::compute_result(bool force_save) {
         d_threshold,
         d_final,
         num_array
-    );
+    );cudaDeviceSynchronize();
 
     // 4. Copy kết quả từ device về host
     size_t final_size = static_cast<size_t>(num_array) * NUM_CYCLE_RESULT * NUM_STRATEGY * 2;
@@ -111,7 +111,7 @@ bool Multi_investMethod::compute_result(bool force_save) {
         d_check_save,
         count_temp_storage,
         config.eval_threshold
-    );
+    );cudaDeviceSynchronize();
 
     // 6. Copy
     cudaMemcpy(h_check_save, d_check_save, sizeof(int) * count_temp_storage * config.num_cycle, cudaMemcpyDeviceToHost);
