@@ -28,7 +28,7 @@ def build_temp_db_path(db_path: str, filter_1525: bool) -> str:
     return db_path[:-8] + suffix
 
 
-def filter_unique_profit_value(db_path: str, critical_col: str, target: int = 100_000, filter_1525: bool = False):
+def filter_unique_profit_value(db_path: str, critical_col: str, target: int = 100_000, filter_1525: bool = False, threshold = 0.0):
     assert db_path.endswith("f_new.db")
 
     db_temp = build_temp_db_path(db_path, filter_1525)
@@ -65,17 +65,17 @@ def filter_unique_profit_value(db_path: str, critical_col: str, target: int = 10
         table_name = f"TT{idx}" if filter_1525 else f"T{idx}"
 
         # Count number of rows
-        cursor_origin.execute(f"SELECT COUNT(*) FROM {table_name};")
+        cursor_origin.execute(f"SELECT COUNT(*) FROM {table_name} where {critical_col} >= {threshold};")
         num_rows = cursor_origin.fetchone()[0]
         print(f"{db_temp}: Table {table_name}, Rows: {num_rows}")
 
         sample_rate = min(float(target) / num_rows, 1.0)
 
         # Fetch data in chunks
-        cursor_origin.execute(f"SELECT * FROM {table_name};")
+        cursor_origin.execute(f"SELECT * FROM {table_name} where {critical_col} >= {threshold};")
         list_df = []
         while True:
-            batch = cursor_origin.fetchmany(1_000_000)
+            batch = cursor_origin.fetchmany(10_000_000)
             if not batch:
                 break
 
