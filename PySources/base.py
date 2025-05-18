@@ -2,7 +2,7 @@ import os
 import sys
 import pandas as pd
 import numpy as np
-# import numba as nb
+import numba as nb
 
 
 def check_required_cols(data: pd.DataFrame, required_cols: set):
@@ -89,6 +89,53 @@ class Base:
         self.save_array(folder, "SYMBOL", np.int32)
         self.save_array(folder, "OPERAND", np.float32)
         self.save_array(folder, "PROFIT", np.float32)
+
+
+@nb.njit
+def decode_formula(f, len_):
+    rs = np.zeros(f.shape[0]*2, dtype=np.int64)
+    rs[0::2] = f // len_
+    rs[1::2] = f % len_
+    return rs
+
+
+@nb.njit
+def encode_formula(f, len_):
+    return f[0::2] * len_ + f[1::2]
+
+
+__STRING_OPERATOR = "+-*/"
+
+def convert_arrF_to_strF(arrF):
+    strF = ""
+    for i in range(len(arrF)):
+        if i % 2 == 1:
+            strF += str(arrF[i])
+        else:
+            strF += __STRING_OPERATOR[arrF[i]]
+
+    return strF
+
+def convert_strF_to_arrF(strF):
+    f_len = sum(strF.count(c) for c in __STRING_OPERATOR) * 2
+    str_len = len(strF)
+    arrF = np.zeros(f_len, dtype=int)
+
+    idx = 0
+    for i in range(f_len):
+        if i % 2 == 1:
+            t_ = 0
+            while True:
+                t_ = 10*t_ + int(strF[idx])
+                idx += 1
+                if idx == str_len or strF[idx] in __STRING_OPERATOR:
+                    break
+            arrF[i] = t_
+        else:
+            arrF[i] = __STRING_OPERATOR.index(strF[idx])
+            idx += 1
+
+    return arrF
 
 
 if __name__ == "__main__":
