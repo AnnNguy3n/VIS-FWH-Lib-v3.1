@@ -20,7 +20,7 @@ def remove_file(path):
         os.remove(path)
 
 
-def merge_table(db_path: str, critical_col: str):
+def merge_table(db_path: str):
     assert db_path.endswith(".db")
     new_db_path = db_path[:-3] + "_new.db"
     remove_file(new_db_path)
@@ -58,6 +58,34 @@ def merge_table(db_path: str, critical_col: str):
         # Create the new table
         cur_new.execute(new_table_sql)
         conn_new.commit()
+
+        sub_tables = [name for name in table_names if name.startswith(f"T{table_num}_")]
+        for sub_table in sub_tables:
+            num_opr = int(sub_table.split("_")[1])
+            cur_origin.execute(f"select * from {sub_table};")
+
+            bias = sum(NUM_FML_PROCESS[:num_opr])
+            inserted_rows = 0
+
+            while True:
+                rows = cur_origin.fetchmany(10_000_000)
+                if not rows:
+                    break
+
+                data_to_insert = [
+                    tuple([row[0], decode(row[1:1+num_opr])] + list(row[1+num_opr:])) for row in rows
+                ]
+                cur_new.executemany(
+                    f"insert into T{table_num} values ({ ",".join(["?"]*len(data_to_insert[0])) });", data_to_insert
+                )
+                conn_new.commit()
+
+                inserted_rows += len(rows)
+                print(f"{new_db_path}: Table T{table_num}, {num_opr} operators, {inserted_rows} rows inserted")
+
+                rows = None
+                data_to_insert = None
+                gc.collect()
 
     conn_origin.close()
     conn_new.close()
