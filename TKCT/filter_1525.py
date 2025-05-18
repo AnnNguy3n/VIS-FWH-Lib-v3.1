@@ -1,6 +1,6 @@
 import sqlite3
 import numpy as np
-from TKCT.mergeTableDB import get_table_names
+from TKCT.mergeTable import get_table_names
 
 
 def fetch_ordered_table_indices(cursor) -> list:
