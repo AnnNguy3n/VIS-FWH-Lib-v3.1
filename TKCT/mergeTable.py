@@ -73,7 +73,7 @@ def merge_table(db_path: str):
                     break
 
                 data_to_insert = [
-                    tuple([row[0], decode(row[1:1+num_opr])] + list(row[1+num_opr:])) for row in rows
+                    tuple([row[0] + bias, decode(row[1:1+num_opr])] + list(row[1+num_opr:])) for row in rows
                 ]
                 tmp_string = ",".join(["?"]*len(data_to_insert[0]))
                 cur_new.executemany(
