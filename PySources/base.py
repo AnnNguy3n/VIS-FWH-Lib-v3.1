@@ -138,6 +138,65 @@ def convert_strF_to_arrF(strF):
     return arrF
 
 
+NEG_INF_FLOAT32 = -np.finfo(np.float32).max
+
+
+@nb.njit
+def calculate_formula(formula, operand, temp_1):
+    temp_0 = np.zeros(operand.shape[1])
+    temp_op = -1
+    for i in range(1, formula.shape[0], 2):
+        if formula[i-1] < 2:
+            temp_op = formula[i-1]
+            temp_1[:] = operand[formula[i]]
+        else:
+            if formula[i-1] == 2:
+                temp_1[:] *= operand[formula[i]]
+            else:
+                temp_1[:] /= operand[formula[i]]
+
+        if i+1 == formula.shape[0] or formula[i+1] < 2:
+            if temp_op == 0:
+                temp_0[:] += temp_1
+            else:
+                temp_0[:] -= temp_1
+
+    temp_0[np.isnan(temp_0) | np.isinf(temp_0)] = NEG_INF_FLOAT32
+    return temp_0
+
+
+@nb.njit
+def calculate_formula_v2(formula, operand, temp_1):
+    temp_0 = np.zeros(operand.shape[1])
+    temp_op = -1
+    deg = 0
+    for i in range(1, formula.shape[0], 2):
+        if formula[i-1] < 2:
+            deg = 1
+            temp_op = formula[i-1]
+            temp_1[:] = operand[formula[i]]
+        else:
+            if formula[i-1] == 2:
+                deg += 1
+                temp_1[:] *= operand[formula[i]]
+            else:
+                deg -= 1
+                temp_1[:] /= operand[formula[i]]
+
+        if i+1 == formula.shape[0] or formula[i+1] < 2:
+            if deg % 2 == 0:
+                np.maximum(temp_1, 0.0, temp_1)
+            temp_1[:] = np.sign(temp_1) * np.pow(np.abs(temp_1), 1.0 / deg)
+
+            if temp_op == 0:
+                temp_0[:] += temp_1
+            else:
+                temp_0[:] -= temp_1
+
+    temp_0[np.isnan(temp_0) | np.isinf(temp_0)] = NEG_INF_FLOAT32
+    return temp_0
+
+
 if __name__ == "__main__":
     data_path = sys.argv[1]
     interest = float(sys.argv[2])
