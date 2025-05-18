@@ -60,3 +60,50 @@ def filter_unique_profit_value(db_path: str, critical_col: str, target: int = 10
 
     list_col_name = [col[1] for col in columns_info]
     print(list_col_name)
+
+    for idx in table_indices:
+        table_name = f"TT{idx}" if filter_1525 else f"T{idx}"
+
+        # Count number of rows
+        cursor_origin.execute(f"SELECT COUNT(*) FROM {table_name};")
+        num_rows = cursor_origin.fetchone()[0]
+        print(f"{db_temp}: Table {table_name}, Rows: {num_rows}")
+
+        sample_rate = min(float(target) / num_rows, 1.0)
+
+        # Fetch data in chunks
+        cursor_origin.execute(f"SELECT * FROM {table_name};")
+        list_df = []
+        while True:
+            batch = cursor_origin.fetchmany(1_000_000)
+            if not batch:
+                break
+
+            batch_df = pd.DataFrame(batch)
+            batch_df.columns = list_col_name
+            batch_df["temp"] = batch_df[critical_col].round(3)
+
+            sampled_batch = batch_df.groupby("temp", group_keys=False).apply(
+                lambda x: sample_data_with_rate(x, sample_rate)
+            )
+            list_df.append(sampled_batch)
+
+        # Merge all sampled batches
+        data = pd.concat(list_df, ignore_index=True)
+
+        # Re-sample if needed
+        final_sample_rate = min(float(target) / len(data), 1.0)
+        final_sample = data.groupby("temp", group_keys=False).apply(
+            lambda x: sample_data_with_rate(x, final_sample_rate)
+        )
+
+        # Prepare and insert into temp DB
+        records_to_insert = final_sample.drop(columns=["temp"]).values.tolist()
+        print(f"{db_temp}: Table {table_name}, Inserted: {len(records_to_insert)} rows")
+
+        tmp_string = ",".join(["?"]*len(list_col_name))
+        cursor_temp.executemany(f"INSERT INTO T{idx} VALUES ({tmp_string});", records_to_insert)
+        conn_temp.commit()
+
+    conn_origin.close()
+    conn_temp.close()
