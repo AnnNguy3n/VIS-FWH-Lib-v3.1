@@ -75,8 +75,9 @@ def merge_table(db_path: str):
                 data_to_insert = [
                     tuple([row[0], decode(row[1:1+num_opr])] + list(row[1+num_opr:])) for row in rows
                 ]
+                tmp_string = ",".join(["?"]*len(data_to_insert[0]))
                 cur_new.executemany(
-                    f"insert into T{table_num} values ({ ",".join(["?"]*len(data_to_insert[0])) });", data_to_insert
+                    f"insert into T{table_num} values ({tmp_string});", data_to_insert
                 )
                 conn_new.commit()
 
