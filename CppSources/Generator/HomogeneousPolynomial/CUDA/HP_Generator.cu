@@ -59,7 +59,7 @@ Generator::Generator(string config_path){
     float *_PROFIT, *_OPERAND;
 
     string command = "python " + config.lib_abs_path + "/PySources/base.py "
-        + config.data_path + " " + to_string(config.interest) + " "
+        + config.data_path + " " + to_string(INTEREST) + " "
         + to_string(config.valuearg_threshold) + " " + config.folder_save + "/InputData";
     system(command.c_str());
 
@@ -100,11 +100,11 @@ Generator::Generator(string config_path){
     start_t_temp = chrono::high_resolution_clock::now();
 
     //
-    fields_to_save = new float*[config.num_cycle];
-    fmls_to_save = new uint8_t*[config.num_cycle];
-    fmls_idx = new int64_t*[config.num_cycle];
-    count_fml_save = new int[config.num_cycle];
-    for (int c_i = 0; c_i < config.num_cycle; c_i++){
+    fields_to_save = new float*[NUM_CYCLE_RESULT];
+    fmls_to_save = new uint8_t*[NUM_CYCLE_RESULT];
+    fmls_idx = new int64_t*[NUM_CYCLE_RESULT];
+    count_fml_save = new int[NUM_CYCLE_RESULT];
+    for (int c_i = 0; c_i < NUM_CYCLE_RESULT; c_i++){
         fields_to_save[c_i] = new float[(__MAX_FTOS__ + config.storage_size + cols) * config.filter_field.size()];
         fmls_idx[c_i] = new int64_t[__MAX_FTOS__ + config.storage_size + cols];
     }
@@ -124,7 +124,7 @@ Generator::~Generator(){
     cudaFree(temp_weight_storage);
     delete[] temp_formula_storage;
 
-    for (int c_i = 0; c_i < config.num_cycle; c_i++){
+    for (int c_i = 0; c_i < NUM_CYCLE_RESULT; c_i++){
         delete[] fields_to_save[c_i];
         delete[] fmls_idx[c_i];
     }
@@ -264,7 +264,7 @@ bool Generator::fill_formula(
             uint8_t **new_formula = new uint8_t*[count];
             int *valid = new int[count];
             int *d_valid;
-            int num_block = count*rows/256 + 1;
+            int num_block = count*ARRAY_LEN/256 + 1;
             cudaMalloc((void**)&d_valid, 4*count);
 
             for (i=0; i<cols; i++){
@@ -280,14 +280,14 @@ bool Generator::fill_formula(
             if (formula[idx-1] < 2){
                 temp_op_new = formula[idx-1];
                 if (num_per_grp != 1){
-                    cudaMalloc((void**)&new_temp_1, 4*count*rows);
-                    copy_from_operands<<<num_block, 256>>>(new_temp_1, OPERAND, d_valid, rows, count);
+                    cudaMalloc((void**)&new_temp_1, 4*count*ARRAY_LEN);
+                    copy_from_operands<<<num_block, 256>>>(new_temp_1, OPERAND, d_valid, ARRAY_LEN, count);
                     cudaDeviceSynchronize();
                 }
             } else {
                 temp_op_new = temp_op;
-                cudaMalloc((void**)&new_temp_1, 4*count*rows);
-                update_temp_weight<<<num_block, 256>>>(new_temp_1, temp_1, OPERAND, d_valid, rows, count, formula[idx-1] == 2);
+                cudaMalloc((void**)&new_temp_1, 4*count*ARRAY_LEN);
+                update_temp_weight<<<num_block, 256>>>(new_temp_1, temp_1, OPERAND, d_valid, ARRAY_LEN, count, formula[idx-1] == 2);
                 cudaDeviceSynchronize();
             }
 
@@ -299,12 +299,12 @@ bool Generator::fill_formula(
             }
             if (chk || idx+1 == fml_shape){
                 temp_0_change = true;
-                cudaMalloc((void**)&new_temp_0, 4*count*rows);
+                cudaMalloc((void**)&new_temp_0, 4*count*ARRAY_LEN);
                 if (num_per_grp != 1){
-                    update_last_weight<<<num_block, 256>>>(new_temp_0, temp_0, new_temp_1, rows, count, !temp_op_new, fml_deg, config.eval_method);
+                    update_last_weight<<<num_block, 256>>>(new_temp_0, temp_0, new_temp_1, ARRAY_LEN, count, !temp_op_new, fml_deg, config.eval_method);
                 } else {
                     update_last_weight_through_operands<<<num_block, 256>>>(
-                        new_temp_0, temp_0, OPERAND, d_valid, rows, count, !temp_op_new
+                        new_temp_0, temp_0, OPERAND, d_valid, ARRAY_LEN, count, !temp_op_new
                     );
                 } cudaDeviceSynchronize();
             }
@@ -333,19 +333,19 @@ bool Generator::fill_formula(
                     if (num_per_grp != 1){
                         for (i=0; i<count; i++)
                             if (fill_formula(new_formula[i], f_struct, new_idx,
-                                            new_temp_0+i*rows, temp_op_new, new_temp_1+i*rows,
+                                            new_temp_0+i*ARRAY_LEN, temp_op_new, new_temp_1+i*ARRAY_LEN,
                                             new_mode, add_sub, mul_div, fml_deg)) return true;
                     } else {
                         for (i=0; i<count; i++)
                             if (fill_formula(new_formula[i], f_struct, new_idx,
-                                            new_temp_0+i*rows, temp_op_new, temp_1,
+                                            new_temp_0+i*ARRAY_LEN, temp_op_new, temp_1,
                                             new_mode, add_sub, mul_div, fml_deg)) return true;
                     }
                 } else {
                     if (num_per_grp != 1){
                         for (i=0; i<count; i++)
                             if (fill_formula(new_formula[i], f_struct, new_idx,
-                                            temp_0, temp_op_new, new_temp_1+i*rows,
+                                            temp_0, temp_op_new, new_temp_1+i*ARRAY_LEN,
                                             new_mode, add_sub, mul_div, fml_deg)) return true;
                     } else {
                         for (i=0; i<count; i++)
@@ -357,8 +357,8 @@ bool Generator::fill_formula(
             }
             else {
                 cudaError_t status = cudaMemcpy(
-                    temp_weight_storage+count_temp_storage*rows,
-                    new_temp_0, 4*count*rows, cudaMemcpyDeviceToDevice
+                    temp_weight_storage+count_temp_storage*ARRAY_LEN,
+                    new_temp_0, 4*count*ARRAY_LEN, cudaMemcpyDeviceToDevice
                 );
                 if (status){
                     raise_error("Cuda bad status", "cudaMemcpy");
@@ -370,8 +370,8 @@ bool Generator::fill_formula(
                 for (i=0; i<fml_shape; i++) current[0][i] = formula[i];
                 current[0][fml_shape-1] = cols;
                 if (count_temp_storage >= config.storage_size){
-                    replace_nan_and_inf<<<count_temp_storage*rows/256 + 1, 256>>>(
-                        temp_weight_storage, rows, count_temp_storage
+                    replace_nan_and_inf<<<count_temp_storage*ARRAY_LEN/256 + 1, 256>>>(
+                        temp_weight_storage, ARRAY_LEN, count_temp_storage
                     );
                     cudaDeviceSynchronize();
                     if (compute_result(false)) return true;
@@ -408,11 +408,11 @@ void Generator::run(){
     uint8_t *formula;
     int **f_struct;
     float *temp_0, *temp_1;
-    cudaMalloc((void**)&temp_0, 4*rows);
-    cudaMalloc((void**)&temp_1, 4*rows);
+    cudaMalloc((void**)&temp_0, 4*ARRAY_LEN);
+    cudaMalloc((void**)&temp_1, 4*ARRAY_LEN);
 
-    float *h_temp_0 = new float[rows];
-    for (i=0; i<rows; i++) h_temp_0[i] = 0.0;
+    float *h_temp_0 = new float[ARRAY_LEN];
+    for (i=0; i<ARRAY_LEN; i++) h_temp_0[i] = 0.0;
 
     string command;
     command.reserve(200);
@@ -420,7 +420,7 @@ void Generator::run(){
     // Loop num_opr_per_fml
     while (true){
         command = "python " + config.lib_abs_path + "/PySources/createTable.py "
-            + config.folder_save + "/f.db 0 " + to_string(config.num_cycle-1) + " "
+            + config.folder_save + "/f.db 0 " + to_string(NUM_CYCLE_RESULT-1) + " "
             + to_string(num_opr_per_fml) + " ";
         for (i=0; i<config.filter_field.size(); i++) command += config.filter_field[i] + " ";
         command.pop_back();
@@ -432,7 +432,7 @@ void Generator::run(){
         for (i=0; i<config.storage_size+cols; i++)
             temp_formula_storage[i] = new uint8_t[fml_shape];
 
-        for (i=0; i<config.num_cycle; i++){
+        for (i=0; i<NUM_CYCLE_RESULT; i++){
             fmls_to_save[i] = new uint8_t[(__MAX_FTOS__ + config.storage_size + cols) * fml_shape];
             count_fml_save[i] = 0;
         }
@@ -452,16 +452,16 @@ void Generator::run(){
             current[1][0] = num_per_grp;
             for (i=0; i<2*num_opr_per_fml; i++) formula[i] = 0;
 
-            cudaMemcpy(temp_0, h_temp_0, 4*rows, cudaMemcpyHostToDevice);
-            cudaMemcpy(temp_1, h_temp_0, 4*rows, cudaMemcpyHostToDevice);
+            cudaMemcpy(temp_0, h_temp_0, 4*ARRAY_LEN, cudaMemcpyHostToDevice);
+            cudaMemcpy(temp_1, h_temp_0, 4*ARRAY_LEN, cudaMemcpyHostToDevice);
 
             if (first) first = false;
             else {
                 for (i=0; i<fml_shape; i++) current[0][i] = 0;
             }
             if (fill_formula(formula, f_struct, 0, temp_0, 0, temp_1, 0, false, false, 1)) return;
-            replace_nan_and_inf<<<count_temp_storage*rows/256 + 1, 256>>>(
-                temp_weight_storage, rows, count_temp_storage
+            replace_nan_and_inf<<<count_temp_storage*ARRAY_LEN/256 + 1, 256>>>(
+                temp_weight_storage, ARRAY_LEN, count_temp_storage
             );
             cudaDeviceSynchronize();
             if (compute_result(true)) return;
@@ -477,7 +477,7 @@ void Generator::run(){
 
         //
         num_opr_per_fml += 1;
-        for (i=0; i<config.num_cycle; i++)
+        for (i=0; i<NUM_CYCLE_RESULT; i++)
             delete[] fmls_to_save[i];
         current[2][0] = 0;
         current[1][0] = 1;
@@ -503,13 +503,13 @@ bool Generator::save_result(bool force_save, float *h_final, int *is_save){
     int64_t k;
     int num_field = config.filter_field.size();
     for (i=0; i<count_temp_storage; i++){
-        for (j=0; j<config.num_cycle; j++){
+        for (j=0; j<NUM_CYCLE_RESULT; j++){
             if (is_save[i*NUM_CYCLE_RESULT+j]){
                 k = current[2][0]+i;
                 // Lưu vào mảng kết quả
                 fmls_idx[j][count_fml_save[j]] = k;
                 memcpy(fmls_to_save[j] + count_fml_save[j] * fml_shape, temp_formula_storage[i], fml_shape);
-                memcpy(fields_to_save[j] + num_field * count_fml_save[j], h_final + i*config.num_cycle*num_field + j*num_field, 4*num_field);
+                memcpy(fields_to_save[j] + num_field * count_fml_save[j], h_final + i*NUM_CYCLE_RESULT*num_field + j*num_field, 4*num_field);
                 count_fml_save[j] ++;
             }
         }
@@ -521,7 +521,7 @@ bool Generator::save_result(bool force_save, float *h_final, int *is_save){
     bool save = false;
     if (force_save) save = true;
     if (!save){
-        for (i=0; i<config.num_cycle; i++){
+        for (i=0; i<NUM_CYCLE_RESULT; i++){
             if (count_fml_save[i] >= __MAX_FTOS__){
                 save = true; break;
             }
@@ -557,8 +557,8 @@ bool Generator::save_result(bool force_save, float *h_final, int *is_save){
         filename = config.folder_save + "/result.bin";
         ofstream outFile2(filename.c_str(), ios::binary);
         if (outFile2.is_open()){
-            outFile2.write(reinterpret_cast<char*>(count_fml_save), 4 * config.num_cycle);
-            for (i=0; i<config.num_cycle; i++){
+            outFile2.write(reinterpret_cast<char*>(count_fml_save), 4 * NUM_CYCLE_RESULT);
+            for (i=0; i<NUM_CYCLE_RESULT; i++){
                 outFile2.write(reinterpret_cast<char*>(fmls_idx[i]), count_fml_save[i] * 8);
                 outFile2.write(reinterpret_cast<char*>(fmls_to_save[i]), count_fml_save[i] * fml_shape);
                 outFile2.write(reinterpret_cast<char*>(fields_to_save[i]), count_fml_save[i] * num_field * 4);
@@ -570,7 +570,7 @@ bool Generator::save_result(bool force_save, float *h_final, int *is_save){
         //
         string command = "python " + config.lib_abs_path + "/PySources/insertResult.py "
             + config.folder_save + "/f.db " // db_path
-            + to_string(config.num_cycle) + " " // num_cycle
+            + to_string(NUM_CYCLE_RESULT) + " " // num_cycle
             + to_string(fml_shape) + " " // fml_shape
             + to_string(num_field) + " " // num_field
             + to_string(cols); // cols
@@ -578,7 +578,7 @@ bool Generator::save_result(bool force_save, float *h_final, int *is_save){
 
         //
         start_t_temp = chrono::high_resolution_clock::now();
-        for (i=0; i<config.num_cycle; i++){
+        for (i=0; i<NUM_CYCLE_RESULT; i++){
             count_fml_save[i] = 0;
         }
 
