@@ -3,12 +3,23 @@ import sqlite3
 import numpy as np
 import os
 
+
 def process_and_insert(db_path: str, num_cycle: int, fml_shape: int, num_field: int, num_column: int):
     folder = os.path.dirname(db_path)
     bin_path = f"{folder}/result.bin"
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
+
+    list_num = [0]
+    for i in range(fml_shape//2):
+        cursor.execute(f"select id from checkpoint_{i+1}")
+        rs = cursor.fetchone()[0]
+        list_num.append(rs)
+
+    bias = sum(list_num[:-1])
+    print(list_num, bias)
+
     cursor.execute("BEGIN")
     try:
         with open(bin_path, "rb") as f:
@@ -34,16 +45,16 @@ def process_and_insert(db_path: str, num_cycle: int, fml_shape: int, num_field: 
                 fields_to_save = np.frombuffer(f.read(4 * num_field * n), dtype=np.float32).reshape((n, num_field))
 
                 # 3.4 Insert vào database
-                table_name = f"T{i}_{fml_shape//2}"
+                table_name = f"T{i}"
 
                 # Chuẩn bị câu SQL insert
-                placeholders = ",".join(["?"] * (1 + fml_shape // 2 + num_field))
+                placeholders = ",".join(["?"] * (2 + num_field))
                 sql = f"INSERT INTO {table_name} VALUES ({placeholders})"
 
                 # Ghép dữ liệu từng dòng
                 data_to_insert = []
                 for j in range(n):
-                    row = [int(fmls_idx[j])] + list(map(int, fmls_to_save[j])) + list(map(float, fields_to_save[j]))
+                    row = [int(fmls_idx[j]+bias),"_".join(map(str, fmls_to_save[j]))] + list(map(float, fields_to_save[j]))
                     data_to_insert.append(row)
 
                 cursor.executemany(sql, data_to_insert)

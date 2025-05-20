@@ -11,8 +11,9 @@ def create_table(database_path: str,
     cursor = connection.cursor()
     cursor.execute("begin")
     for cycle in range(start_cycle, end_cycle+1):
-        query = f"create table if not exists T{cycle}_{num_operand}(id integer not null,"
-        query += "".join([f"E{i} integer not null," for i in range(num_operand)])
+        query = f"create table if not exists T{cycle}(id integer not null,"
+        # query += "".join([f"E{i} integer not null," for i in range(num_operand)])
+        query += "Formula TEXT not null,"
         query += ",".join([f"{c} real" for c in list_column]) + ")"
         cursor.execute(query)
 
