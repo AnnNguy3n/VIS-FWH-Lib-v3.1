@@ -25,6 +25,10 @@ def run(args: list[str]):
     center_method_num = int(folder_save[-1])
 
     df_CT = pd.read_excel(f"{folder_save}/{cyc_id}.xlsx")
+    list_col = ["id", "CT"]
+    for i in range(1, 10):
+        list_col.extend([f"ValHar{i}", f"HarNgn{i}"])
+    df_CT.columns = list_col
 
     data = pd.read_excel(DATA_PATH)
     data = data[data["TIME"] <= MIN_CYC + cyc_id]
