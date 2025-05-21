@@ -143,7 +143,7 @@ NEG_INF_FLOAT32 = -np.finfo(np.float32).max
 
 @nb.njit
 def calculate_formula(formula, operand, temp_1):
-    temp_0 = np.zeros(operand.shape[1])
+    temp_0 = np.zeros(operand.shape[1], np.float32)
     temp_op = -1
     for i in range(1, formula.shape[0], 2):
         if formula[i-1] < 2:
@@ -167,7 +167,7 @@ def calculate_formula(formula, operand, temp_1):
 
 @nb.njit
 def calculate_formula_v2(formula, operand, temp_1):
-    temp_0 = np.zeros(operand.shape[1])
+    temp_0 = np.zeros(operand.shape[1], np.float32)
     temp_op = -1
     deg = 0
     for i in range(1, formula.shape[0], 2):
