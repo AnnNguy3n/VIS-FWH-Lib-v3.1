@@ -15,7 +15,7 @@ __constant__ int ARRAY_LEN;
 
 __constant__ int INDEX[100];
 
-constexpr int CHUNK_SIZE = 128;
+constexpr int CHUNK_SIZE = 192;
 constexpr int NUM_COLS = 30;
 __constant__ float OPERAND[NUM_COLS][CHUNK_SIZE];
 
@@ -102,6 +102,7 @@ __global__ void calculate_formula(
 
 
 int main(int argc, char* argv[]) {
+    auto start = std::chrono::high_resolution_clock::now();
     string folder_data = argv[1];
     int eval_method = stoi(argv[2]);
     int center_method_num = stoi(argv[3]);
@@ -167,8 +168,14 @@ int main(int argc, char* argv[]) {
 
         calculate_formula<<<num_block, threads, threads.x * 2 * CHUNK_SIZE * 4>>>(
             N_formula, dev_N_result, cp_f_start, cp_f_len, num_array, eval_method, offset
-        );
+        ); cudaDeviceSynchronize();
+
+        cout << offset << endl;
     }
 
     cudaMemcpy(host_N_result, dev_N_result, num_array*rows*4, cudaMemcpyDeviceToHost);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    std::cout << "Execution time: " << elapsed.count() << " seconds" << std::endl;
 }
