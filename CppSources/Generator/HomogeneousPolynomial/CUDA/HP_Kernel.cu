@@ -34,7 +34,7 @@ __global__ void update_temp_weight(float * __restrict__ temp_weight_new, float *
 };
 
 
-__device__ float safe_root(float x, int deg) {
+__device__ __forceinline__ float safe_root(float x, int deg) {
     if (x < 0.0) {
         if (deg % 2 == 0) return 0.0;
         else return -powf(-x, 1.0 / deg);

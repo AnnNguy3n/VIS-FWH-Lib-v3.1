@@ -6,6 +6,7 @@
 #include <string>
 #include "../CppSources/Utils/WorkWithFile.cpp"
 #include <fstream>
+#include <chrono>
 using namespace std;
 
 
@@ -15,9 +16,7 @@ __constant__ int ARRAY_LEN;
 
 __constant__ int INDEX[100];
 
-constexpr int CHUNK_SIZE = 192;
-constexpr int NUM_COLS = 30;
-// __constant__ float OPERAND[NUM_COLS][CHUNK_SIZE];
+constexpr int CHUNK_SIZE = 32;
 
 
 __device__ __forceinline__
@@ -70,14 +69,14 @@ void _calculate_formula(
         }
     }
 
-    for (int j = 0; j < CHUNK_SIZE; ++j) {
-        if (isnan(temp_0[j]) || isinf(temp_0[j]))
-            temp_0[j] = -FLT_MAX;
-    }
-
     int end_offset = min(offset + CHUNK_SIZE, ARRAY_LEN);
-    for (int j = offset; j < end_offset; ++j)
-        result[j] = temp_0[j-offset];
+    while (end_offset-- > offset) {
+        int idx = end_offset - offset;
+        if (isnan(temp_0[idx]) || isinf(temp_0[idx]))
+            temp_0[idx] = -FLT_MAX;
+
+        result[end_offset] = temp_0[idx];
+    }
 }
 
 
@@ -95,8 +94,8 @@ __global__ void calculate_formula(
     if (tid >= num_array) return;
 
     const int start = cp_f_start[tid];
-    const int* formula = &N_formula[start];
     const int F_len = cp_f_len[tid];
+    const int* formula = &N_formula[start];
     float* result = N_result + tid * ARRAY_LEN;
 
     _calculate_formula(formula, F_len, eval_method, result, offset, d_OPERAND);
@@ -169,16 +168,13 @@ int main(int argc, char* argv[]) {
     int num_block = (num_array + threads.x - 1) / threads.x;
 
     for (int offset = 0; offset < rows; offset += CHUNK_SIZE) {
-        // for (int i = 0; i < NUM_COLS; ++i)
-        //     cudaMemcpyToSymbol(OPERAND[i], _OPERAND + i * rows + offset, 4 * min(CHUNK_SIZE, rows - offset), 0);
-
         calculate_formula<<<num_block, threads, threads.x * 2 * CHUNK_SIZE * 4>>>(
             N_formula, dev_N_result, cp_f_start, cp_f_len, num_array, eval_method, offset, d_OPERAND
-        ); cudaDeviceSynchronize();
+        );
 
-        cout << offset << endl;
+        if (offset % 3584 == 3552) cudaDeviceSynchronize();
     }
-
+    cudaDeviceSynchronize();
     cudaMemcpy(host_N_result, dev_N_result, num_array*rows*4, cudaMemcpyDeviceToHost);
 
     auto end = std::chrono::high_resolution_clock::now();
