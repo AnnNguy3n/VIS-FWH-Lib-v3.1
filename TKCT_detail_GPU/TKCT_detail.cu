@@ -161,9 +161,9 @@ int main(int argc, char* argv[]) {
     dim3 threads(32);
     int num_block = (num_array + threads.x - 1) / threads.x;
 
-    for (int offset = 0; offset < ARRAY_LEN; offset += CHUNK_SIZE) {
+    for (int offset = 0; offset < rows; offset += CHUNK_SIZE) {
         for (int i = 0; i < NUM_COLS; ++i)
-            cudaMemcpyToSymbol(OPERAND[i], _OPERAND + i * ARRAY_LEN + offset, 4 * min(CHUNK_SIZE, ARRAY_LEN - offset), 0);
+            cudaMemcpyToSymbol(OPERAND[i], _OPERAND + i * rows + offset, 4 * min(CHUNK_SIZE, rows - offset), 0);
 
         calculate_formula<<<num_block, threads, threads.x * 2 * CHUNK_SIZE * 4>>>(
             N_formula, dev_N_result, cp_f_start, cp_f_len, num_array, eval_method, offset
