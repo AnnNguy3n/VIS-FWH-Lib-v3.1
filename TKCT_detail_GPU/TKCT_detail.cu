@@ -34,7 +34,7 @@ void _StreakInvest(
     // Khởi tạo
     int market_streak = 0;
     for (int i = 0; i < NUM_SYMBOL_UNIQUE; ++i) symbol_streak[i] = 0;
-    int_fill_value(arr_invest, 0, ARRAY_LEN, false);
+    int_fill_value(arr_invest, 0, ARRAY_LEN, 0);
 
     // Duyệt ngược qua từng chu kỳ
     for (int cycle_idx = INDEX_LEN - 2; cycle_idx >= 0; --cycle_idx) {
@@ -61,7 +61,7 @@ void _StreakInvest(
             //
             if (N >= method_num) {
                 if (sym_streak > min(market_streak, method_num - 1)) {
-                    arr_invest[i] = true;
+                    arr_invest[i] = 1;
                 }
             }
         }
@@ -218,18 +218,18 @@ int main(int argc, char* argv[]) {
 
     //
     int *_N_formula, *_cp_f_start, *_cp_f_len;
-    int num_array;
+    int num_array, NF_arr_len;
     int *N_formula, *cp_f_start, *cp_f_len;
 
-    read_binary_file_1d(_N_formula, num_array, folder_data + "/InputData/N_formula.bin");
+    read_binary_file_1d(_N_formula, NF_arr_len, folder_data + "/InputData/N_formula.bin");
     read_binary_file_1d(_cp_f_start, num_array, folder_data + "/InputData/cp_f_start.bin");
     read_binary_file_1d(_cp_f_len, num_array, folder_data + "/InputData/cp_f_len.bin");
 
-    cudaMalloc((void**)&N_formula, 4*num_array);
+    cudaMalloc((void**)&N_formula, 4*NF_arr_len);
     cudaMalloc((void**)&cp_f_start, 4*num_array);
     cudaMalloc((void**)&cp_f_len, 4*num_array);
 
-    cudaMemcpy(N_formula, _N_formula, 4*num_array, cudaMemcpyHostToDevice);
+    cudaMemcpy(N_formula, _N_formula, 4*NF_arr_len, cudaMemcpyHostToDevice);
     cudaMemcpy(cp_f_start, _cp_f_start, 4*num_array, cudaMemcpyHostToDevice);
     cudaMemcpy(cp_f_len, _cp_f_len, 4*num_array, cudaMemcpyHostToDevice);
 
@@ -248,7 +248,7 @@ int main(int argc, char* argv[]) {
 
     dim3 threads(32);
     int num_block = (num_array + threads.x - 1) / threads.x;
-    calculate_formula<<<num_block, threads>>>(
+    calculate_formula<<<num_block, threads, max_*threads.x>>>(
         OPERAND, N_temp_0, N_temp_1, N_formula, cp_f_start, cp_f_len, num_array, eval_method
     ); cudaDeviceSynchronize();
 
