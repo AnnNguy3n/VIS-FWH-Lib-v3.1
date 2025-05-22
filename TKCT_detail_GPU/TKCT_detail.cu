@@ -17,7 +17,7 @@ __constant__ int INDEX[100];
 
 constexpr int CHUNK_SIZE = 192;
 constexpr int NUM_COLS = 30;
-__constant__ float OPERAND[NUM_COLS][CHUNK_SIZE];
+// __constant__ float OPERAND[NUM_COLS][CHUNK_SIZE];
 
 
 __device__ __forceinline__
@@ -26,7 +26,8 @@ void _calculate_formula(
     const int F_len,
     const int eval_method,
           float* __restrict__ result,
-    const int offset
+    const int offset,
+    const float* __restrict__ d_OPERAND
 ) {
     //
     extern __shared__ float smem[];
@@ -47,14 +48,14 @@ void _calculate_formula(
         if (oprt < 2) {
             deg = 1;
             temp_op = oprt;
-            f_copy_array(temp_1, OPERAND[oprand], 0, CHUNK_SIZE, 0);
+            f_copy_array(temp_1, d_OPERAND + oprand * ARRAY_LEN + offset, 0, CHUNK_SIZE, 0);
         } else {
             if (oprt == 2) {
                 ++deg;
-                f_mul_inpl(temp_1, OPERAND[oprand], CHUNK_SIZE);
+                f_mul_inpl(temp_1, d_OPERAND + oprand * ARRAY_LEN + offset, CHUNK_SIZE);
             } else {
                 --deg;
-                f_div_inpl(temp_1, OPERAND[oprand], CHUNK_SIZE);
+                f_div_inpl(temp_1, d_OPERAND + oprand * ARRAY_LEN + offset, CHUNK_SIZE);
             }
         }
 
@@ -87,7 +88,8 @@ __global__ void calculate_formula(
     const int*   __restrict__ cp_f_len,
     const int num_array,
     const int eval_method,
-    const int offset
+    const int offset,
+    const float* __restrict__ d_OPERAND
 ) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= num_array) return;
@@ -97,7 +99,7 @@ __global__ void calculate_formula(
     const int F_len = cp_f_len[tid];
     float* result = N_result + tid * ARRAY_LEN;
 
-    _calculate_formula(formula, F_len, eval_method, result, offset);
+    _calculate_formula(formula, F_len, eval_method, result, offset, d_OPERAND);
 }
 
 
@@ -115,6 +117,10 @@ int main(int argc, char* argv[]) {
     read_binary_file_1d(_BOOL_ARG, rows, folder_data + "/InputData/BOOL_ARG.bin");
     read_binary_file_1d(_PROFIT, rows, folder_data + "/InputData/PROFIT.bin");
     read_binary_file_2d(_OPERAND, cols, rows, folder_data + "/InputData/OPERAND.bin");
+
+    float* d_OPERAND;
+    cudaMalloc((void**)&d_OPERAND, rows * cols * sizeof(float));
+    cudaMemcpy(d_OPERAND, _OPERAND, rows * cols * sizeof(float), cudaMemcpyHostToDevice);
 
     int max_ = 0;
     for (int i = 0; i < rows; ++i) {
@@ -163,11 +169,11 @@ int main(int argc, char* argv[]) {
     int num_block = (num_array + threads.x - 1) / threads.x;
 
     for (int offset = 0; offset < rows; offset += CHUNK_SIZE) {
-        for (int i = 0; i < NUM_COLS; ++i)
-            cudaMemcpyToSymbol(OPERAND[i], _OPERAND + i * rows + offset, 4 * min(CHUNK_SIZE, rows - offset), 0);
+        // for (int i = 0; i < NUM_COLS; ++i)
+        //     cudaMemcpyToSymbol(OPERAND[i], _OPERAND + i * rows + offset, 4 * min(CHUNK_SIZE, rows - offset), 0);
 
         calculate_formula<<<num_block, threads, threads.x * 2 * CHUNK_SIZE * 4>>>(
-            N_formula, dev_N_result, cp_f_start, cp_f_len, num_array, eval_method, offset
+            N_formula, dev_N_result, cp_f_start, cp_f_len, num_array, eval_method, offset, d_OPERAND
         ); cudaDeviceSynchronize();
 
         cout << offset << endl;
