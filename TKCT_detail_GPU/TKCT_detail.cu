@@ -253,6 +253,13 @@ int main(int argc, char* argv[]) {
     }
     cudaDeviceSynchronize();
     cudaMemcpy(host_N_result, dev_N_result, num_array*rows*4, cudaMemcpyDeviceToHost);
+    // Lưu kết quả công thức về host
+    {
+        ofstream outRes(folder_data + "/OutputData/N_result.bin", ios::binary);
+        if (!outRes.is_open()) throw runtime_error("Cant open N_result.bin");
+        outRes.write(reinterpret_cast<const char*>(host_N_result), num_array * rows * sizeof(float));
+        outRes.close();
+    }
 
     // Tính invest L, C, R
     float *_N_threshold, *N_threshold;
