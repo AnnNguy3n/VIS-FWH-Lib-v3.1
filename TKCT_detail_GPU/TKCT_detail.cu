@@ -105,7 +105,7 @@ __global__ void calculate_formula(
 __device__ __forceinline__
 void _StreakInvest(
     const float* __restrict__ weight,
-          int*   __restrict__ arr_invest,
+          bool*  __restrict__ arr_invest,
     const int*   __restrict__ symbol,
     const int*   __restrict__ sufficient_liquidity,
     const float threshold,
@@ -120,7 +120,7 @@ void _StreakInvest(
     // Khởi tạo
     int market_streak = 0;
     for (int i = 0; i < NUM_SYMBOL_UNIQUE; ++i) symbol_streak[i] = 0;
-    int_fill_value(arr_invest, 0, ARRAY_LEN, 0);
+    for (int i = 0; i < ARRAY_LEN; ++i) arr_invest[i] = false;
 
     // Duyệt ngược qua từng chu kỳ
     for (int cycle_idx = INDEX_LEN - 2; cycle_idx >= 0; --cycle_idx) {
@@ -147,7 +147,7 @@ void _StreakInvest(
             //
             if (N >= method_num) {
                 if (sym_streak > min(market_streak, method_num - 1)) {
-                    arr_invest[i] = 1;
+                    arr_invest[i] = true;
                 }
             }
         }
@@ -160,7 +160,7 @@ void _StreakInvest(
 
 __global__ void StreakInvest(
     const float* __restrict__ N_weight,
-          int*   __restrict__ N_arr_invest,
+          bool*  __restrict__ N_arr_invest,
     const int*   __restrict__ symbol,
     const int*   __restrict__ sufficient_liquidity,
     const float* __restrict__ N_threshold,
@@ -185,6 +185,7 @@ int main(int argc, char* argv[]) {
     int eval_method = stoi(argv[2]);
     int center_method_num = stoi(argv[3]);
 
+    // Load data
     int *_INDEX, *_SYMBOL, *_BOOL_ARG;
     float *_PROFIT, *_OPERAND;
     int index_len, rows, cols;
@@ -194,10 +195,18 @@ int main(int argc, char* argv[]) {
     read_binary_file_1d(_PROFIT, rows, folder_data + "/InputData/PROFIT.bin");
     read_binary_file_2d(_OPERAND, cols, rows, folder_data + "/InputData/OPERAND.bin");
 
-    float* d_OPERAND;
+    int *SYMBOL, *BOOL_ARG;
+    float *PROFIT, *d_OPERAND;
     cudaMalloc((void**)&d_OPERAND, rows * cols * sizeof(float));
     cudaMemcpy(d_OPERAND, _OPERAND, rows * cols * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMalloc((void**)&SYMBOL, rows * sizeof(float));
+    cudaMalloc((void**)&BOOL_ARG, rows * sizeof(float));
+    cudaMalloc((void**)&PROFIT, rows * sizeof(float));
+    cudaMemcpy(SYMBOL, _SYMBOL, rows * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(BOOL_ARG, _BOOL_ARG, rows * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(PROFIT, _PROFIT, rows * sizeof(float), cudaMemcpyHostToDevice);
 
+    // Ghi vào constants
     int max_ = 0;
     for (int i = 0; i < rows; ++i) {
         if (_SYMBOL[i] > max_) max_ = _SYMBOL[i];
@@ -208,35 +217,21 @@ int main(int argc, char* argv[]) {
     cudaMemcpyToSymbol(ARRAY_LEN, &rows, 4);
     cudaMemcpyToSymbol(NUM_SYMBOL_UNIQUE, &max_, 4);
 
-    //
-    int *SYMBOL, *BOOL_ARG;
-    float *PROFIT;
-    cudaMalloc((void**)&SYMBOL, 4*rows);
-    cudaMalloc((void**)&BOOL_ARG, 4*rows);
-    cudaMalloc((void**)&PROFIT, 4*rows);
-
-    cudaMemcpy(SYMBOL, _SYMBOL, 4*rows, cudaMemcpyHostToDevice);
-    cudaMemcpy(BOOL_ARG, _BOOL_ARG, 4*rows, cudaMemcpyHostToDevice);
-    cudaMemcpy(PROFIT, _PROFIT, 4*rows, cudaMemcpyHostToDevice);
-
-    //
+    // Đọc formula
     int *_N_formula, *_cp_f_start, *_cp_f_len;
     int num_array, NF_arr_len;
     int *N_formula, *cp_f_start, *cp_f_len;
-
     read_binary_file_1d(_N_formula, NF_arr_len, folder_data + "/InputData/N_formula.bin");
     read_binary_file_1d(_cp_f_start, num_array, folder_data + "/InputData/cp_f_start.bin");
     read_binary_file_1d(_cp_f_len, num_array, folder_data + "/InputData/cp_f_len.bin");
-
     cudaMalloc((void**)&N_formula, 4*NF_arr_len);
     cudaMalloc((void**)&cp_f_start, 4*num_array);
     cudaMalloc((void**)&cp_f_len, 4*num_array);
-
     cudaMemcpy(N_formula, _N_formula, 4*NF_arr_len, cudaMemcpyHostToDevice);
     cudaMemcpy(cp_f_start, _cp_f_start, 4*num_array, cudaMemcpyHostToDevice);
     cudaMemcpy(cp_f_len, _cp_f_len, 4*num_array, cudaMemcpyHostToDevice);
 
-    //
+    // Tính toán weights
     float *host_N_result, *dev_N_result;
     host_N_result = new float[num_array*rows];
     cudaMalloc((void**)&dev_N_result, num_array*rows*4);
@@ -249,25 +244,24 @@ int main(int argc, char* argv[]) {
             N_formula, dev_N_result, cp_f_start, cp_f_len, num_array, eval_method, offset, d_OPERAND
         );
 
-        if (offset % 3584 == 3552) cudaDeviceSynchronize();
+        if (offset % (CHUNK_SIZE * 112) == (CHUNK_SIZE * 111)) cudaDeviceSynchronize();
     }
     cudaDeviceSynchronize();
     cudaMemcpy(host_N_result, dev_N_result, num_array*rows*4, cudaMemcpyDeviceToHost);
-    // Lưu kết quả công thức về host
-    {
-        ofstream outRes(folder_data + "/OutputData/N_result.bin", ios::binary);
-        if (!outRes.is_open()) throw runtime_error("Cant open N_result.bin");
-        outRes.write(reinterpret_cast<const char*>(host_N_result), num_array * rows * sizeof(float));
-        outRes.close();
-    }
+
+    // Lưu kết quả công thức
+    ofstream outRes(folder_data + "/OutputData/N_result.bin", ios::binary);
+    if (!outRes.is_open()) throw runtime_error("Cant open N_result.bin");
+    outRes.write(reinterpret_cast<const char*>(host_N_result), num_array * rows * sizeof(float));
+    outRes.close();
 
     // Tính invest L, C, R
     float *_N_threshold, *N_threshold;
     cudaMalloc((void**)&N_threshold, 4*num_array);
 
-    int* _N_arr_invest, *N_arr_invest;
-    _N_arr_invest = new int[num_array*rows];
-    cudaMalloc((void**)&N_arr_invest, num_array*4*rows);
+    bool* _N_arr_invest, *N_arr_invest;
+    _N_arr_invest = new bool[num_array*rows];
+    cudaMalloc((void**)&N_arr_invest, num_array*rows);
 
     --center_method_num;
     for (char c : string("LCR")) {
@@ -276,15 +270,14 @@ int main(int argc, char* argv[]) {
 
         StreakInvest<<<num_block, threads, max_ * threads.x>>>(
             dev_N_result, N_arr_invest, SYMBOL, BOOL_ARG, N_threshold, num_array, center_method_num
-        );
-        cudaDeviceSynchronize();
+        ); cudaDeviceSynchronize();
         ++center_method_num;
-        cudaMemcpy(_N_arr_invest, N_arr_invest, 4*rows*num_array, cudaMemcpyDeviceToHost);
+        cudaMemcpy(_N_arr_invest, N_arr_invest, rows*num_array, cudaMemcpyDeviceToHost);
 
         /* Lưu N_arr_invest*/
         ofstream outL(folder_data + "/OutputData/N_invest_" + string(1, c) + ".bin", ios::binary);
         if (!outL.is_open()) throw runtime_error("Cant open file");
-        outL.write(reinterpret_cast<const char*>(_N_arr_invest), num_array*rows*4);
+        outL.write(reinterpret_cast<const char*>(_N_arr_invest), num_array*rows);
         outL.close();
 
         delete[] _N_threshold;
