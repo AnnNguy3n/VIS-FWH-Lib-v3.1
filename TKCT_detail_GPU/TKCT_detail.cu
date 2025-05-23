@@ -102,6 +102,83 @@ __global__ void calculate_formula(
 }
 
 
+__device__ __forceinline__
+void _StreakInvest(
+    const float* __restrict__ weight,
+          int*   __restrict__ arr_invest,
+    const int*   __restrict__ symbol,
+    const int*   __restrict__ sufficient_liquidity,
+    const float threshold,
+    const int   method_num
+) {
+    // Trích các mảng tạm từ shared memory
+    extern __shared__ char smem[];
+
+    uint8_t* symbol_streak_base = reinterpret_cast<uint8_t*>(smem);
+    uint8_t* symbol_streak = symbol_streak_base + threadIdx.x * NUM_SYMBOL_UNIQUE;
+
+    // Khởi tạo
+    int market_streak = 0;
+    for (int i = 0; i < NUM_SYMBOL_UNIQUE; ++i) symbol_streak[i] = 0;
+    int_fill_value(arr_invest, 0, ARRAY_LEN, 0);
+
+    // Duyệt ngược qua từng chu kỳ
+    for (int cycle_idx = INDEX_LEN - 2; cycle_idx >= 0; --cycle_idx) {
+        int start = INDEX[cycle_idx];
+        int end   = INDEX[cycle_idx + 1];
+
+        //
+        int N = INDEX_LEN - 1 - cycle_idx;
+        bool any_pass_threshold = false;
+
+        // Duyệt qua tất cả công ty trong chu kỳ hiện tại
+        for (int i = start; i < end; ++i) {
+            int sym = symbol[i];
+            if (weight[i] <= threshold) {
+                symbol_streak[sym] = 0;
+                continue;
+            }
+
+            any_pass_threshold = true;
+            int sym_streak = ++symbol_streak[sym];
+
+            if (!sufficient_liquidity[i]) continue;
+
+            //
+            if (N >= method_num) {
+                if (sym_streak > min(market_streak, method_num - 1)) {
+                    arr_invest[i] = 1;
+                }
+            }
+        }
+
+        // Cập nhật market streak
+        market_streak = any_pass_threshold ? market_streak + 1 : 0;
+    }
+}
+
+
+__global__ void StreakInvest(
+    const float* __restrict__ N_weight,
+          int*   __restrict__ N_arr_invest,
+    const int*   __restrict__ symbol,
+    const int*   __restrict__ sufficient_liquidity,
+    const float* __restrict__ N_threshold,
+    const int num_array,
+    const int method_num
+) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= num_array) return;
+
+    _StreakInvest(
+        N_weight + tid * ARRAY_LEN,
+        N_arr_invest + tid * ARRAY_LEN,
+        symbol, sufficient_liquidity,
+        N_threshold[tid], method_num
+    );
+}
+
+
 int main(int argc, char* argv[]) {
     auto start = std::chrono::high_resolution_clock::now();
     string folder_data = argv[1];
@@ -177,7 +254,58 @@ int main(int argc, char* argv[]) {
     cudaDeviceSynchronize();
     cudaMemcpy(host_N_result, dev_N_result, num_array*rows*4, cudaMemcpyDeviceToHost);
 
+    // Tính invest L, C, R
+    float *_N_threshold, *N_threshold;
+    cudaMalloc((void**)&N_threshold, 4*num_array);
+
+    int* _N_arr_invest, *N_arr_invest;
+    _N_arr_invest = new int[num_array*rows];
+    cudaMalloc((void**)&N_arr_invest, num_array*4*rows);
+
+    --center_method_num;
+    for (char c : string("LCR")) {
+        read_binary_file_1d(_N_threshold, num_array, folder_data + "/InputData/N_threshold" + string(1, c) +  ".bin");
+        cudaMemcpy(N_threshold, _N_threshold, 4*num_array, cudaMemcpyHostToDevice);
+
+        StreakInvest<<<num_block, threads, max_ * threads.x>>>(
+            dev_N_result, N_arr_invest, SYMBOL, BOOL_ARG, N_threshold, num_array, center_method_num
+        );
+        cudaDeviceSynchronize();
+        ++center_method_num;
+        cudaMemcpy(_N_arr_invest, N_arr_invest, 4*rows*num_array, cudaMemcpyDeviceToHost);
+
+        /* Lưu N_arr_invest*/
+        ofstream outL(folder_data + "/OutputData/N_invest_" + string(1, c) + ".bin", ios::binary);
+        if (!outL.is_open()) throw runtime_error("Cant open file");
+        outL.write(reinterpret_cast<const char*>(_N_arr_invest), num_array*rows*4);
+        outL.close();
+
+        delete[] _N_threshold;
+    }
+
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
     std::cout << "Execution time: " << elapsed.count() << " seconds" << std::endl;
+
+    delete[] _INDEX;
+    delete[] _SYMBOL;
+    delete[] _PROFIT;
+    delete[] _BOOL_ARG;
+    delete[] _OPERAND;
+    delete[] _N_arr_invest;
+    delete[] host_N_result;
+    delete[] _N_formula;
+    delete[] _cp_f_start;
+    delete[] _cp_f_len;
+
+    cudaFree(SYMBOL);
+    cudaFree(PROFIT);
+    cudaFree(BOOL_ARG);
+    cudaFree(d_OPERAND);
+    cudaFree(dev_N_result);
+    cudaFree(N_formula);
+    cudaFree(cp_f_start);
+    cudaFree(cp_f_len);
+    cudaFree(N_arr_invest);
+    cudaFree(N_threshold);
 }
