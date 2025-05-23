@@ -112,9 +112,9 @@ void _StreakInvest(
     const int   method_num
 ) {
     // Trích các mảng tạm từ shared memory
-    extern __shared__ char smem[];
+    extern __shared__ char smem1[];
 
-    uint8_t* symbol_streak_base = reinterpret_cast<uint8_t*>(smem);
+    uint8_t* symbol_streak_base = reinterpret_cast<uint8_t*>(smem1);
     uint8_t* symbol_streak = symbol_streak_base + threadIdx.x * NUM_SYMBOL_UNIQUE;
 
     // Khởi tạo
