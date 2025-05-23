@@ -243,8 +243,6 @@ int main(int argc, char* argv[]) {
         calculate_formula<<<num_block, threads, threads.x * 2 * CHUNK_SIZE * 4>>>(
             N_formula, dev_N_result, cp_f_start, cp_f_len, num_array, eval_method, offset, d_OPERAND
         );
-
-        if (offset % (CHUNK_SIZE * 112) == (CHUNK_SIZE * 111)) cudaDeviceSynchronize();
     }
     cudaDeviceSynchronize();
     cudaMemcpy(host_N_result, dev_N_result, num_array*rows*4, cudaMemcpyDeviceToHost);
