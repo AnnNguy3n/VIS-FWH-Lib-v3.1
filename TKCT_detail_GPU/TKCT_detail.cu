@@ -16,7 +16,7 @@ __constant__ int ARRAY_LEN;
 
 __constant__ int INDEX[100];
 
-constexpr int CHUNK_SIZE = 32;
+constexpr int CHUNK_SIZE = 192;
 
 
 __device__ __forceinline__
@@ -242,9 +242,8 @@ int main(int argc, char* argv[]) {
     for (int offset = 0; offset < rows; offset += CHUNK_SIZE) {
         calculate_formula<<<num_block, threads, threads.x * 2 * CHUNK_SIZE * 4>>>(
             N_formula, dev_N_result, cp_f_start, cp_f_len, num_array, eval_method, offset, d_OPERAND
-        );
+        ); cudaDeviceSynchronize();
     }
-    cudaDeviceSynchronize();
     cudaMemcpy(host_N_result, dev_N_result, num_array*rows*4, cudaMemcpyDeviceToHost);
 
     // Lưu kết quả công thức

@@ -35,6 +35,7 @@ def filter_1525(db_path: str, critical_col: str, threshold: float):
     cursor_new.execute("SELECT name FROM origin.sqlite_master WHERE type='table'")
     tables = [name[0] for name in cursor_new.fetchall() if name[0].startswith("T")]
     table_indices = sorted(set(int(name.split("_")[0][1:]) for name in tables))
+    print(table_indices)
 
     create_intersection_tables(cursor_new, table_indices, critical_col, threshold)
 

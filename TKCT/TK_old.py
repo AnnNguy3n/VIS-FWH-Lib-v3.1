@@ -32,19 +32,24 @@ def is_similar(f1, f2, level):
             return False
     return True
 
+import os
 
 def filter(DB_PATH, NAM_ID, target, num_field, level, FOLDER_SAVE, critical_col, filter_1525: bool):
+    if os.path.exists(f"{FOLDER_SAVE}/{NAM_ID}.xlsx"):
+        print(f"{FOLDER_SAVE}/{NAM_ID}.xlsx")
+        return
     connect = sqlite3.connect(DB_PATH)
     cursor = connect.cursor()
 
     TB_NAME = f"TT{NAM_ID}" if filter_1525 else f"T{NAM_ID}"
-    cursor.execute(f"SELECT count(*) FROM {TB_NAME}")
-    num_rows = cursor.fetchall()[0][0]
+    # cursor.execute(f"SELECT count(*) FROM {TB_NAME}")
+    # num_rows = cursor.fetchall()[0][0]
+    num_rows = 1000000
     print(num_rows)
     list_ct = []
     list_data = []
 
-    cursor.execute(f"SELECT * FROM {TB_NAME} ORDER BY {critical_col} DESC;")
+    cursor.execute(f"SELECT * FROM {TB_NAME} ORDER BY {critical_col} DESC LIMIT 1000000;")
     # with tqdm(total=target) as pbar:
     if True:
         for k in range(num_rows):
@@ -65,9 +70,9 @@ def filter(DB_PATH, NAM_ID, target, num_field, level, FOLDER_SAVE, critical_col,
                     break
             # pbar.set_postfix(processed=k+1)
 
-    with open(f"{FOLDER_SAVE}/{NAM_ID}.txt", "w") as f:
-        list_ct_str = map(lambda x: convert_arrF_to_strF(decode_formula(x, num_field)), list_ct)
-        f.write("\n".join(list_ct_str))
+    # with open(f"{FOLDER_SAVE}/{NAM_ID}.txt", "w") as f:
+    #     list_ct_str = map(lambda x: convert_arrF_to_strF(decode_formula(x, num_field)), list_ct)
+    #     f.write("\n".join(list_ct_str))
 
     pd.DataFrame(list_data).to_excel(f"{FOLDER_SAVE}/{NAM_ID}.xlsx", index=False)
     connect.close()
