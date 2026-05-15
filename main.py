@@ -10,6 +10,7 @@ import datetime
 import sys
 from PySources.editConstants import edit_constants
 from PySources.base import Base
+import subprocess
 
 
 def run_worker(lib_abs_path, generate_method, filter_name, worker_type, config_path, wait_before_run, timeout):
@@ -40,8 +41,18 @@ def run_worker(lib_abs_path, generate_method, filter_name, worker_type, config_p
     estimated_end = now + datetime.timedelta(minutes=timeout)
     print(f"Estimated time end: {estimated_end.hour}-{estimated_end.minute}-{estimated_end.second}")
 
-    os.system(f"start /wait cmd /c nvcc {lib_abs_path}SIMM.cu -o {lib_abs_path}ExeFile/{filename}CUDA.exe")
-    os.system(f"start /wait cmd /c {command}")
+    # Windows
+    # os.system(f"start /wait cmd /c nvcc {lib_abs_path}SIMM.cu -o {lib_abs_path}ExeFile/{filename}CUDA.exe")
+    # os.system(f"start /wait cmd /c {command}")
+
+    # Ubuntu
+    subprocess.run([
+        "nvcc",
+        f"{lib_abs_path}SIMM.cu",
+        "-o", f"{lib_abs_path}ExeFile/{filename}CUDA.exe"
+    ])
+
+    subprocess.run(command, shell=True)
 
 
 # ----------------- Utility functions for data and config preparation -----------------
@@ -134,6 +145,7 @@ def generate_task_config(config_item, warehouse_path, folder_formula, lib_abs_pa
         f"lib_abs_path = {lib_abs_path}",
         f"timeout_in_minutes = {timeout_per_task}",
         f"num_strategy = {num_strategy}",
+        f"data_window_length = {config_item['data_window_length']}",
     ]
 
     config_path = os.path.join(save_folder, "config.txt")

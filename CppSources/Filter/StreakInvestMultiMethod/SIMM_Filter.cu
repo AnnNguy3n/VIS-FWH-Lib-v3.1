@@ -72,7 +72,11 @@ bool Multi_investMethod::compute_result(bool force_save) {
     int total_threads = num_array * THRESHOLDS_PER_ARRAY;
     int blocks_invest = (total_threads + threads.x - 1) / threads.x;
     // Tính dung lượng shared memory
-    int shared_mem_bytes = threads.x * (NUM_SYMBOL_UNIQUE + 12*NUM_STRATEGY);
+    if (config.data_window_length <= 0)
+        raise_error("Invalid data_window_length: must be greater than 0. A value of 1 means using the full history to calculate the harmonic mean.", "");
+
+    int shared_mem_bytes = threads.x * (NUM_SYMBOL_UNIQUE + 8*NUM_STRATEGY + 4*NUM_STRATEGY*config.data_window_length);
+
     M_investMethod<<<blocks_invest, threads, shared_mem_bytes>>>(
         temp_weight_storage,
         d_threshold,
@@ -80,7 +84,8 @@ bool Multi_investMethod::compute_result(bool force_save) {
         SYMBOL,
         BOOL_ARG,
         d_result,
-        num_array
+        num_array,
+        config.data_window_length
     );cudaDeviceSynchronize();
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {

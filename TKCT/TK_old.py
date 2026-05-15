@@ -45,7 +45,7 @@ def filter(DB_PATH, NAM_ID, target, num_field, level, FOLDER_SAVE, critical_col,
     # cursor.execute(f"SELECT count(*) FROM {TB_NAME}")
     # num_rows = cursor.fetchall()[0][0]
     num_rows = 1000000
-    print(num_rows)
+    # print(num_rows)
     list_ct = []
     list_data = []
 
@@ -54,6 +54,8 @@ def filter(DB_PATH, NAM_ID, target, num_field, level, FOLDER_SAVE, critical_col,
     if True:
         for k in range(num_rows):
             data = cursor.fetchone()
+            if data is None:
+                break
             ct = np.array(list(map(int, data[1].split("_"))))
 
             check = True
@@ -67,6 +69,7 @@ def filter(DB_PATH, NAM_ID, target, num_field, level, FOLDER_SAVE, critical_col,
                 list_data.append(data)
                 # pbar.update(1)
                 if len(list_ct) == target:
+                    print(k, NAM_ID, critical_col)
                     break
             # pbar.set_postfix(processed=k+1)
 

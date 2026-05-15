@@ -23,7 +23,7 @@ class Base:
         data = data.reset_index(drop=True).fillna(0.0)
 
         # Check các cột bắt buộc
-        dropped_cols = {"TIME", "PROFIT", "SYMBOL", "VALUEARG"}
+        dropped_cols = {"TIME", "PROFIT", "SYMBOL", "VALUEARG", "MARKETCAP"}
         check_required_cols(data, dropped_cols)
 
         # Check dtypes

@@ -36,6 +36,8 @@ public:
 
     vector<string> filter_field;
 
+    int data_window_length;
+
 
     HomoPolyConfig() {}
 
@@ -64,6 +66,8 @@ public:
 
         istringstream iss(get_value_by_key(keys, values, "filter_field"));
         while (getline(iss, temp, ';')) filter_field.push_back(temp);
+
+        data_window_length = stoi(get_value_by_key(keys, values, "data_window_length"));
     }
 
 

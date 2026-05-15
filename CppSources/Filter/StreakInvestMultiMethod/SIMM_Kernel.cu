@@ -14,7 +14,8 @@ void _M_investMethod(
           float* __restrict__ result,
 
     const float threshold,
-    const int   threshold_cycle_idx
+    const int   threshold_cycle_idx,
+    const int data_window_length
 ) {
     // Trích các mảng tạm từ shared memory
     extern __shared__ char smem[];
@@ -22,19 +23,20 @@ void _M_investMethod(
     uint8_t* symbol_streak_base = reinterpret_cast<uint8_t*>(smem);
     float*   tmp_profit_base    = reinterpret_cast<float*>  (symbol_streak_base + blockDim.x * NUM_SYMBOL_UNIQUE);
     float*   tmp_harmean_base   =                            tmp_profit_base    + blockDim.x * NUM_STRATEGY;
-    int*     tmp_icount_base    = reinterpret_cast<int*>    (tmp_harmean_base   + blockDim.x * NUM_STRATEGY);
+    int*     tmp_icount_base    = reinterpret_cast<int*>    (tmp_harmean_base   + blockDim.x * NUM_STRATEGY * data_window_length);
 
     // Điểm truy cập riêng của thread hiện tại:
     uint8_t* symbol_streak = symbol_streak_base + threadIdx.x * NUM_SYMBOL_UNIQUE;
     float*   tmp_profit    = tmp_profit_base    + threadIdx.x * NUM_STRATEGY;
-    float*   tmp_harmean   = tmp_harmean_base   + threadIdx.x * NUM_STRATEGY;
+    float*   tmp_harmean   = tmp_harmean_base   + threadIdx.x * NUM_STRATEGY * data_window_length;
     int*     tmp_icount    = tmp_icount_base    + threadIdx.x * NUM_STRATEGY;
 
     // Khởi tạo
     int market_streak = 0;
 
     for (int i = 0; i < NUM_SYMBOL_UNIQUE; ++i) symbol_streak[i] = 0;
-    for (int i = 0; i < NUM_STRATEGY; ++i) tmp_harmean[i] = 0.0f;
+    if (data_window_length == 1){for (int i = 0; i < NUM_STRATEGY; ++i) tmp_harmean[i] = 0.0f;}
+    else {for (int i = 0; i < NUM_STRATEGY * data_window_length; ++i) tmp_harmean[i] = FLT_MAX;}
 
     // Duyệt ngược qua từng chu kỳ
     for (int cycle_idx = INDEX_LEN - 2; cycle_idx >= 1; --cycle_idx) {
@@ -75,14 +77,27 @@ void _M_investMethod(
         }
 
         // Cập nhật harmean tích luỹ
-        for (int k = 0; k < num_applicable_strategy; ++k)
-            tmp_harmean[k] += 1.0f / (tmp_icount[k] ? tmp_profit[k] / static_cast<float>(tmp_icount[k]) : INTEREST);
+        for (int k = 0; k < num_applicable_strategy; ++k) {
+            if (data_window_length == 1)
+                tmp_harmean[k] += 1.0f / (tmp_icount[k] ? tmp_profit[k] / static_cast<float>(tmp_icount[k]) : INTEREST);
+            else
+                tmp_harmean[k * data_window_length + cycle_idx % data_window_length] = 1.0f / (tmp_icount[k] ? tmp_profit[k] / static_cast<float>(tmp_icount[k]) : INTEREST);
+        }
 
         // Lưu kết quả nếu cycle nằm trong vùng cần ghi
         if (cycle_idx <= NUM_CYCLE_RESULT && threshold_cycle_idx + 1 >= cycle_idx) {
             int offset = (NUM_CYCLE_RESULT - cycle_idx) * NUM_STRATEGY;
-            for (int k = 0; k < num_applicable_strategy; ++k)
-                result[offset + k] = static_cast<float>(N - k) / tmp_harmean[k];
+            for (int k = 0; k < num_applicable_strategy; ++k) {
+                if (data_window_length == 1) {
+                    result[offset + k] = static_cast<float>(N - k) / tmp_harmean[k];
+                }
+                else {
+                    float tmp_sum = 0.0;
+                    for (int wi = 0; wi < data_window_length; ++wi)
+                        tmp_sum += tmp_harmean[k * data_window_length + wi];
+                    result[offset + k] = static_cast<float>(data_window_length) / tmp_sum;
+                }
+            }
         }
 
         // Cập nhật market streak
@@ -100,7 +115,8 @@ __global__ void M_investMethod(
 
           float* __restrict__ N_result,
 
-    const int num_array
+    const int num_array,
+    const int data_window_length
 ) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= num_array * THRESHOLDS_PER_ARRAY) return;
@@ -112,7 +128,8 @@ __global__ void M_investMethod(
         N_weight + array_idx * ARRAY_LEN,
         profit, symbol, sufficient_liquidity,
         N_result + tid * NUM_CYCLE_RESULT * NUM_STRATEGY,
-        N_threshold[tid], thres_idx / THRESHOLDS_PER_CYCLE
+        N_threshold[tid], thres_idx / THRESHOLDS_PER_CYCLE,
+        data_window_length
     );
 }
 
